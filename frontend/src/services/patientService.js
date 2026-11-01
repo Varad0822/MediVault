@@ -2,7 +2,7 @@ import { supabase } from "../lib/supabase";
 import authService from "./authService";
 
 const patientService = {
-  // Helper to generate unique 6-digit Patient Code (e.g., PAT-839201)
+  // Helper to generate unique 6-digit Patient Code
   generateShortPatientCode() {
     const randomDigits = Math.floor(100000 + Math.random() * 900000);
     return `PAT-${randomDigits}`;
@@ -16,7 +16,6 @@ const patientService = {
 
     if (!user) throw new Error("User not found");
 
-    // Get profile
     let { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("*")
@@ -28,6 +27,7 @@ const patientService = {
     // Auto-generate patient_code if missing
     if (!profile.patient_code && profile.role === "patient") {
       const newCode = this.generateShortPatientCode();
+
       const { data: updatedProfile } = await supabase
         .from("profiles")
         .update({ patient_code: newCode })
@@ -63,6 +63,8 @@ const patientService = {
   async getMedicalRecords() {
     const user = await authService.getCurrentUser();
 
+    if (!user) throw new Error("User not found");
+
     const { data, error } = await supabase
       .from("medical_records")
       .select(`
@@ -80,10 +82,46 @@ const patientService = {
   },
 
   // ============================
+  // Delete Medical Record
+  // ============================
+  async deleteMedicalRecord(recordId) {
+    const user = await authService.getCurrentUser();
+
+    if (!user) {
+      throw new Error("User not found. Please log in again.");
+    }
+
+    if (!recordId) {
+      throw new Error("Medical record ID is required.");
+    }
+
+    const { data, error } = await supabase
+      .from("medical_records")
+      .delete()
+      .eq("id", recordId)
+      .eq("patient_id", user.id)
+      .select("id");
+
+    if (error) {
+      throw new Error(`Could not delete medical record: ${error.message}`);
+    }
+
+    if (!data || data.length === 0) {
+      throw new Error(
+        "Record was not deleted. Check your permissions or confirm that the record belongs to you."
+      );
+    }
+
+    return true;
+  },
+
+  // ============================
   // Prescriptions
   // ============================
   async getPrescriptions() {
     const user = await authService.getCurrentUser();
+
+    if (!user) throw new Error("User not found");
 
     const { data, error } = await supabase
       .from("prescriptions")
@@ -107,6 +145,8 @@ const patientService = {
   async getAccessSessions() {
     const user = await authService.getCurrentUser();
 
+    if (!user) throw new Error("User not found");
+
     const { data, error } = await supabase
       .from("access_sessions")
       .select("*")
@@ -123,6 +163,8 @@ const patientService = {
   // ============================
   async generateOTP({ otp, scope, expiry }) {
     const user = await authService.getCurrentUser();
+
+    if (!user) throw new Error("User not found");
 
     const { data, error } = await supabase
       .from("access_sessions")
@@ -177,7 +219,7 @@ const patientService = {
   },
 
   // ==============================
-  // Update Patient Profile (Resilient to Schema Differences)
+  // Update Patient Profile
   // ==============================
   async updatePatientProfile(profileData) {
     const user = await authService.getCurrentUser();
@@ -202,7 +244,7 @@ const patientService = {
     if (error) {
       console.warn("Patient details full upsert notice:", error.message);
 
-      // 2. If a column is missing in DB schema, fallback to basic core columns
+      // 2. If a column is missing, fallback to core columns
       if (error.message?.includes("column") || error.code === "PGRST204") {
         const { error: fallbackError } = await supabase
           .from("patient_details")

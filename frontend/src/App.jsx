@@ -19,7 +19,8 @@ import UploadPreviousRecord from "./pages/patient/UploadPreviousRecord";
 
 // Doctor Pages
 import DoctorDashboard from "./pages/doctor/DoctorDashboard";
-import DoctorProfile from "./pages/doctor/DoctorProfile";
+import DoctorProfilePage from "./pages/doctor/DoctorProfilePage";
+import VisitedPatientRecords from "./pages/doctor/VisitedPatientRecords";
 import DoctorAccess from "./pages/doctor/DoctorAccess";
 import AddMedicalRecord from "./pages/doctor/AddMedicalRecord";
 import AddPrescription from "./pages/doctor/AddPrescription";
@@ -137,7 +138,7 @@ function App() {
           path="/doctor-profile"
           element={
             <ProtectedRoute>
-              <DoctorProfile />
+              <DoctorProfilePage />
             </ProtectedRoute>
           }
         />
@@ -145,7 +146,7 @@ function App() {
           path="/doctor-visited-patients"
           element={
             <ProtectedRoute>
-              <DoctorProfile />
+              <VisitedPatientRecords />
             </ProtectedRoute>
           }
         />

@@ -177,108 +177,67 @@ const doctorService = {
   // ============================
   // OTP Access Verification (Supports Short PAT-XXXXXX Code, Partial UUID 'faec', or Full UUID)
   // ============================
-  async verifyPatientOTP({ patientId, otp }) {
-    const currentTime = new Date().toISOString();
-    const cleanOtp = (otp || "").trim();
-    const cleanInput = (patientId || "").trim();
+  async verifyAccessOtp(patientIdentifier, otp) {
+  const patientUuid = await this.resolvePatientIdentifier(patientIdentifier);
 
-    if (!cleanOtp) {
-      throw new Error("Please enter the 6-digit access OTP.");
-    }
-    if (!cleanInput) {
-      throw new Error("Please enter the Patient ID or Short Code.");
+    if (!patientUuid) {
+      throw new Error("No patient found for that ID or code.");
     }
 
-    // Strategy 1: Check active access session by OTP directly
-    // This immediately yields the exact, valid 36-char patient UUID without guessing!
-    const { data: sessionByOtp } = await supabase
-      .from("access_sessions")
-      .select("*")
-      .eq("otp", cleanOtp)
-      .eq("is_active", true)
-      .gte("expiry", currentTime)
-      .maybeSingle();
+    const { data, error } = await supabase.rpc("verify_access_otp", {
+      p_patient: patientUuid,
+      p_otp: String(otp).trim(),
+    });
+    console.log("OTP RPC response:", data);
+    console.log("OTP RPC error:", error);
+    if (error) throw error;
 
-    let actualPatientUUID = null;
-    let verifiedSession = sessionByOtp;
-
-    if (sessionByOtp && this.isValidUUID(sessionByOtp.patient_id)) {
-      actualPatientUUID = sessionByOtp.patient_id;
-    } else {
-      // Strategy 2: Try resolving via patient identifier resolver
-      const resolved = await this.resolvePatientIdentifier(cleanInput);
-      if (resolved && this.isValidUUID(resolved)) {
-        actualPatientUUID = resolved;
-        const { data: sessionByPatId } = await supabase
-          .from("access_sessions")
-          .select("*")
-          .eq("patient_id", actualPatientUUID)
-          .eq("otp", cleanOtp)
-          .eq("is_active", true)
-          .gte("expiry", currentTime)
-          .maybeSingle();
-
-        verifiedSession = sessionByPatId;
+    if (!data?.ok) {
+      if (data?.reason === "too_many_attempts") {
+        throw new Error(
+          "Too many wrong attempts. Please wait 15 minutes and try again."
+        );
       }
-    }
 
-    if (!actualPatientUUID || !this.isValidUUID(actualPatientUUID)) {
-      throw new Error(
-        `Patient account not found for ID "${cleanInput}". Please verify the Patient ID or PAT-XXXXXX code.`
-      );
-    }
+      if (data?.reason === "not_a_doctor") {
+        throw new Error("Only doctor accounts can verify an OTP.");
+      }
 
-    if (!verifiedSession) {
-      throw new Error("Invalid, revoked, or expired OTP for this Patient ID.");
+      throw new Error("Invalid or expired OTP.");
     }
-
-    const { data: patientProfile } = await supabase
-      .from("profiles")
-      .select("id, full_name, email, patient_code")
-      .eq("id", actualPatientUUID)
-      .maybeSingle();
 
     return {
-      session: verifiedSession,
-      patient: patientProfile || {
-        id: actualPatientUUID,
-        full_name: "Patient Record",
-        patient_code: `PAT-${actualPatientUUID.substring(0, 6).toUpperCase()}`,
-      },
-      resolvedPatientId: actualPatientUUID,
+      patientId: patientUuid,
+      scope: data.scope,
+      expiry: data.expiry,
     };
+  },
+  async getActiveAccessScope(patientUuid) {
+  const { data, error } = await supabase.rpc("get_my_access_scope", {
+  p_patient: patientUuid,
+  });
+
+    if (error) throw error;
+
+    return data ?? null;
   },
 
   // ============================
   // End / Terminate Patient Access Session (Doctor Side)
   // ============================
-  async endPatientSession(sessionId) {
-    const { error } = await supabase
-      .from("access_sessions")
-      .update({
-        is_active: false,
-      })
-      .eq("id", sessionId);
+  async endPatientSessionByPatientId(patientIdentifier) {
+  const patientUuid = await this.resolvePatientIdentifier(patientIdentifier);
+
+    if (!patientUuid) {
+      throw new Error("Patient not found.");
+    }
+
+    const { error } = await supabase.rpc("end_access_session", {
+      p_patient: patientUuid,
+    });
 
     if (error) throw error;
-    return true;
-  },
-
-  async endPatientSessionByPatientId(patientId) {
-    const actualPatientUUID = await this.resolvePatientIdentifier(patientId);
-    if (!actualPatientUUID) return false;
-
-    const { error } = await supabase
-      .from("access_sessions")
-      .update({
-        is_active: false,
-      })
-      .eq("patient_id", actualPatientUUID)
-      .eq("is_active", true);
-
-    if (error) throw error;
-    return true;
-  },
+  },  
 
   // ============================
   // Authorized Patient History
@@ -303,21 +262,46 @@ const doctorService = {
   },
 
   async getPatientPrescriptions(patientId) {
-    const actualPatientUUID = await this.resolvePatientIdentifier(patientId);
-    if (!actualPatientUUID) return [];
+    const actualPatientUUID =
+      await this.resolvePatientIdentifier(patientId);
+
+    console.log(
+      "[Prescription Debug] Input patient ID:",
+      patientId
+    );
+
+    console.log(
+      "[Prescription Debug] Resolved patient UUID:",
+      actualPatientUUID
+    );
+
+    if (!actualPatientUUID) {
+      console.error(
+        "[Prescription Debug] Could not resolve patient UUID."
+      );
+      return [];
+    }
 
     const { data, error } = await supabase
       .from("prescriptions")
-      .select(`
-        *,
-        doctor:profiles!prescriptions_doctor_id_fkey(
-          full_name
-        )
-      `)
+      .select("*")
       .eq("patient_id", actualPatientUUID)
       .order("created_at", { ascending: false });
 
-    if (error) throw error;
+    console.log(
+      "[Prescription Debug] Supabase error:",
+      error
+    );
+
+    console.log(
+      "[Prescription Debug] Returned rows:",
+      data
+    );
+
+    if (error) {
+      throw error;
+    }
+
     return data || [];
   },
 
