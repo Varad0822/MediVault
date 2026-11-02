@@ -1,9 +1,10 @@
-1. Project Overview
+## Project Overview
 
 MediVault is an AI-driven healthcare platform designed to provide secure, patient-controlled management of medical records. The system allows patients to store and manage their medical information while granting doctors controlled access to relevant health records.
+
 The platform integrates AI-assisted medical report extraction, machine learning-based disease risk prediction, and role-based access control to improve healthcare data management. It aims to address issues such as unauthorized access, fragmented medical records, and limited patient control over healthcare information.
 
-2. Setup
+## Setup
 
 1. Clone the MediVault repository.
 2. Install the required frontend and backend dependencies.
@@ -15,7 +16,7 @@ The platform integrates AI-assisted medical report extraction, machine learning-
 
 Refer to the repository's environment configuration and dependency files for the exact setup requirements.
 
-3. Usage
+## Usage
 
 1. Register or log in as a patient or doctor.
 2. Patients can upload medical reports and manage their healthcare records.
@@ -25,7 +26,7 @@ Refer to the repository's environment configuration and dependency files for the
 6. Users can access heart disease severity and diabetes prediction features.
 7. Doctors can view patient information according to the permissions granted.
 
-4. Reproducing the Results
+## Reproducing the Results
 
 1. Install the required dependencies and configure the project environment.
 2. Access the heart disease and diabetes analysis notebooks available in the `ml/notebooks/` directory.
